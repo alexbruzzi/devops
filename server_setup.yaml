@@ -1,0 +1,69 @@
+---
+
+- hosts: microsite
+  user: ubuntu
+  sudo: True
+
+  vars:
+    temp_dir: /home/ubuntu/temp
+    apps_dir: /home/ubuntu/apps
+
+  roles:
+      - role: rvm_io.rvm1-ruby
+        rvm1_rvm_version: stable
+        rvm1_rvm_check_for_updates: False
+        rvm1_rubies:
+          - 'ruby-2.1.5'
+
+  tasks:
+    - name: Update the system
+      apt: update_cache=yes
+
+    - name: Ensure Git dependencies for OpenSSL are installed
+      apt: pkg={{ item }} state=installed force=yes
+      with_items:
+        - build-essential
+        - fakeroot
+        - dpkg-dev
+        - libcurl4-openssl-dev
+
+    - name: Build dependency for Git
+      apt: pkg=git state=build-dep
+
+    - name: Create directory for git openssl
+      shell: mkdir -p {{ temp_dir }}/git-openssl
+
+    - name: Get git source
+      shell: cd {{ temp_dir }}/git-openssl &&  apt-get source git
+
+    - name: Dpkg Source
+      shell: cd {{ temp_dir }}/git-openssl && dpkg-source -x git_1.9.1-1ubuntu0.3.dsc
+
+    - name: Copying debian/control
+      copy: src=templates/control dest={{ temp_dir }}/git-openssl/git-1.9.1/debian
+
+    - name: Copy debian/rules for building git
+      copy: src=templates/rules dest={{ temp_dir }}/git-openssl/git-1.9.1/debian
+
+    - name: Ensure libcurl4-openssl-dev is installed (AGAIN)
+      shell: apt-get install libcurl4-openssl-dev -y
+
+    - name: Build package
+      shell: cd {{ temp_dir }}/git-openssl/git-1.9.1 && dpkg-buildpackage -b
+      ignore_errors: True
+
+    - name: Installing Git
+      shell: dpkg -i {{ temp_dir }}/git-openssl/git_1.9.1-1ubuntu0.3_amd64.deb
+
+    - name: Installing any unsatisfied dependencies
+      shell: apt-get -f install -y
+
+    - name: Attempting to re-install Git
+      shell: dpkg -i {{ temp_dir }}/git-openssl/git_1.9.1-1ubuntu0.3_amd64.deb
+
+    - name: Updating git config to NOT verify SSL
+      shell: git config --global http.sslVerify "false"
+
+    - name: Ensure apps directory
+      action: file dest={{ apps_dir }}  state=directory
+

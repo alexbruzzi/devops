@@ -1,0 +1,17 @@
+[api_consumer]
+54.169.213.173
+
+[enterprise_dashboard]
+52.221.234.170
+
+[internal_dashboard]
+52.221.234.170
+
+[api_handler]
+54.169.213.173
+
+[redis]
+54.169.199.198
+
+[microsite]
+52.77.251.150

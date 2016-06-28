@@ -1,0 +1,71 @@
+---
+
+- name: Deploy Recurring Jobs
+  hosts: redis
+  user: ubuntu
+  sudo: True
+
+  vars:
+    git_user: pp
+    git_pass: 1qaz1qaz
+    app_name: recurring_jobs
+    num_workers: 2
+    repo_url: "https://{{ git_user }}:{{ git_pass }}@phab.octo.ai/diffusion/RECURR/recurring-jobs.git"
+    repo_remote: origin
+    repo_version: master
+    repo_dir_name: "{{ ansible_date_time.epoch }}"
+    apps_dir: /home/ubuntu/apps
+    scheduler_pid: "{{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/shared/pids/resque_scheduler.pid"
+    worker_pid: "{{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/shared/pids/resque_worker"
+
+  tasks:
+    - name: Ensuring app dir is present
+      action: file dest={{ apps_dir }}/{{ app_name }} state=directory
+
+    - name: Ensure directory for api_handler
+      action: file dest={{apps_dir}}/{{app_name}}/src state=directory
+
+    - name: deploy code from repository
+      git: repo={{ repo_url }}
+        dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}
+        remote={{ repo_remote }}
+        version={{ repo_version }}
+        accept_hostkey=yes
+        force=True
+      async: 30
+      poll: 30
+
+    - name: Symlink gems and config
+      file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/gems/octo-core/lib/octocore/config/config state=link force=yes
+
+    - name: Symlink Recurring Jobs and config
+      file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/lib/config/config state=link force=yes
+
+    - name: Performing bundle install
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && bundle install
+
+    - name: Stopping Resque Scheduler
+      shell: kill -TERM `cat {{ scheduler_pid }}`
+      ignore_errors: True
+
+    - name: Stopping Resque Workers
+      shell: kill -TERM `cat {{ worker_pid }}_{{ item }}.pid`
+      with_sequence: count={{ num_workers }}
+      ignore_errors: True
+
+    - name: Symlinking deployment to run directory
+      file: src={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ dest={{ apps_dir }}/{{ app_name }}/run state=link force=yes
+
+    - name: Starting Resque Scheduler
+      shell: cd {{ apps_dir }}/{{ app_name }}/run && bundle exec rake resque:scheduler
+      environment:
+        PIDFILE: "{{ scheduler_pid }}"
+        BACKGROUND: yes
+
+    - name: Starting Resque Workers
+      shell: cd {{ apps_dir }}/{{ app_name }}/run && QUEUE=* bundle exec rake resque:work
+      environment:
+        PIDFILE: "{{ worker_pid }}_{{ item }}.pid"
+        BACKGROUND: yes
+      with_sequence: "count={{ num_workers }}"
+

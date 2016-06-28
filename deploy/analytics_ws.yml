@@ -1,0 +1,39 @@
+---
+
+- name: Deploy Analytics WebService
+  hosts: analytics_ws
+  user: ubuntu
+  sudo: True
+
+  vars:
+    git_user: pp
+    git_pass: 1qaz1qaz
+    app_name: analytics_ws
+    repo_url: "https://{{ git_user }}:{{ git_pass }}@phab.octo.ai/diffusion/WSANA/analytics_ws.git"
+    repo_remote: origin
+    repo_version: master
+    repo_dir_name: "8765"
+    apps_dir: /home/ubuntu/apps
+
+  tasks:
+    - name: Ensuring app dir is present
+      action: file dest={{ apps_dir }}/{{ app_name }} state=directory
+
+    - name: Ensure directory for analytics_ws
+      action: file dest={{apps_dir}}/{{app_name}}/src state=directory
+
+    - name: deploy code from repository
+      git: repo={{ repo_url }}
+        dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}
+        remote={{ repo_remote }}
+        version={{ repo_version }}
+        accept_hostkey=yes
+        force=True
+
+    - name: Symlink gems and config
+      file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/gems/octo-core/lib/octocore/config/config state=link force=yes
+
+    - name: "Symlink {{ app_name }} and config"
+      file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/lib/config/config state=link force=yes
+
+

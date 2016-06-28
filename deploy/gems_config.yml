@@ -1,0 +1,46 @@
+---
+
+- name: Installing Gems
+#hosts: api_consumer:api_handler:enterprise_dashboard:redis:microsite
+  hosts: microsite
+  user: ubuntu
+  sudo: True
+
+  vars:
+    git_user: pp
+    git_pass: 1qaz1qaz
+    repo_remote: origin
+    repo_version: master
+    apps_dir: /home/ubuntu/apps
+    gems_repo_url: "https://{{ git_user }}:{{ git_pass }}@phab.octo.ai/diffusion/GEMS/gems.git"
+    config_repo_url: "https://{{ git_user }}:{{ git_pass }}@phab.octo.ai/diffusion/CONFIG/config.git"
+
+  tasks:
+    - name: Ensuring apps_dir is present
+      action: file dest={{ apps_dir }} state=directory
+
+    - name: Deploy Gems repo
+      git: repo={{ gems_repo_url }}
+        dest={{ apps_dir }}/gems/
+        remote=origin
+        version=master
+        accept_hostkey=yes
+        force=True
+      async: 30
+      poll: 30
+
+    - name: Deploy Config Repo
+      git: repo={{ config_repo_url }}
+        dest={{ apps_dir }}/config/
+        remote=origin
+        version=master
+        accept_hostkey=yes
+        force=True
+      async: 30
+      poll: 30
+
+    - name: Building Octo Gems
+      shell: cd {{ apps_dir }}/gems && ./build.sh
+      async: 30
+      poll: 30
+
