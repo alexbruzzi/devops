@@ -18,9 +18,13 @@
   tasks:
     - name: Ensuring app dir is present
       action: file dest={{ apps_dir }}/{{ app_name }} state=directory
+      tags:
+        - deploy
 
     - name: Ensure directory for api_handler
       action: file dest={{apps_dir}}/{{app_name}}/src state=directory
+      tags:
+        - deploy
 
     - name: deploy code from repository
       git: repo={{ repo_url }}
@@ -31,25 +35,58 @@
         force=True
       async: 30
       poll: 30
+      tags:
+        - deploy
 
 
     - name: Symlink gems and config
       file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/gems/octo-core/lib/octocore/config/config state=link force=yes
+      tags:
+        - deploy
 
     - name: Symlink  api_handler and config
       file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/config/config state=link force=yes
+      tags:
+        - deploy
 
     - name: Performing bundle install
-      shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && bundle install
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && rm -rf Gemfile.lock && bundle install
+      tags:
+        - deploy
+
+    - name: Making sure GOD is started
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god -c octo.god
+      tags:
+        - restart
+        - deploy
+
+    - name: Copying api_handler GOD script
+      copy: src=../god/{{ app_name }}.god dest={{ apps_dir }}/heaven/run/lib/{{ app_name }}.god
+      tags:
+        - restart
+        - deploy
 
     - name: Stopping API Handler
-      shell: cd {{ apps_dir }}/{{ app_name }}/run/ && kill -TERM `cat shared/pids/unicorn.pid`
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god load octo.god && bundle exec god stop {{ app_name }}
       ignore_errors: True
+      tags:
+        - deploy
+        - restart
 
     - name: Symlinking deployment to run directory
       file: src={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ dest={{ apps_dir }}/{{ app_name }}/run state=link force=yes
+      tags:
+        - deploy
 
 
     - name: Starting API Handler
-      shell: cd {{ apps_dir }}/{{ app_name }}/run && bundle exec unicorn -c config/unicorn.rb -D
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god start {{ app_name }}
+      tags:
+        - deploy
+        - restart
+
+    - name: Cleaning old sources files
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/ && (ls -t|head -n 5;ls)| sort| uniq -u|xargs rm -rf
+      tags:
+        - deploy
 
