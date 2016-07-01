@@ -1,0 +1,43 @@
+---
+
+- name: Installing Heaven
+  hosts: api_consumer:api_handler:enterprise_dashboard:redis:microsite
+  user: ubuntu
+  sudo: True
+
+  vars:
+    git_user: pp
+    git_pass: 1qaz1qaz
+    repo_remote: origin
+    repo_version: master
+    app_name: heaven
+    apps_dir: /home/ubuntu/apps
+    repo_dir_name: "{{ ansible_date_time.epoch }}"
+    repo_url: "https://{{ git_user }}:{{ git_pass }}@phab.octo.ai/diffusion/HEAVEN/heaven.git"
+
+  tasks:
+    - name: Ensuring app dir is present
+      action: file dest={{ apps_dir }}/{{ app_name }} state=directory
+
+    - name: Ensure directory for heaven
+      action: file dest={{ apps_dir }}/{{ app_name }}/src state=directory
+
+    - name: deploy code from repository
+      git: repo={{ repo_url }}
+        dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}
+        remote={{ repo_remote }}
+        version={{ repo_version }}
+        accept_hostkey=yes
+        force=True
+      async: 30
+      poll: 30
+
+    - name: Installing God gem
+      gem: name=god state=latest
+
+    - name: Performing bundle install
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && bundle install
+
+    - name: Symlinking deployment to run directory
+      file: src={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ dest={{ apps_dir }}/{{ app_name }}/run state=link force=yes
+
