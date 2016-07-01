@@ -38,6 +38,16 @@
     - name: Performing bundle install
       shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && bundle install
 
+
+    - name: Stopping God
+      shell: cd {{ apps_dir }}/{{ app_name }}/run && bundle exec god terminate
+
     - name: Symlinking deployment to run directory
       file: src={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ dest={{ apps_dir }}/{{ app_name }}/run state=link force=yes
+
+    - name: Starting God
+      shell: cd {{ apps_dir }}/{{ app_name }}/run && bundle exec god -c octo.god
+
+    - name: Cleaning old sources files
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/ && (ls -t|head -n 5;ls)| sort| uniq -u|xargs rm -rf
 

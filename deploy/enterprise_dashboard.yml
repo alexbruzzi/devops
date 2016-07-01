@@ -9,7 +9,6 @@
     git_user: pp
     git_pass: 1qaz1qaz
     app_name: enterprise_dashboard
-    port: 9292
     repo_url: "https://{{ git_user }}:{{ git_pass }}@phab.octo.ai/diffusion/DASHE/enterprise-dashboard.git"
     repo_remote: origin
     repo_version: master
@@ -81,10 +80,13 @@
         - deploy
 
     - name: Starting The Dashboard
-      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god start enterprise_dashboard
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god load octo.god && bundle exec god start enterprise_dashboard
       tags:
         - restart
         - deploy
 
     - name: Cleaning old sources files
       shell: cd {{ apps_dir }}/{{ app_name }}/src/ && (ls -t|head -n 5;ls)| sort| uniq -u|xargs rm -rf
+      tags:
+        - deploy
+
