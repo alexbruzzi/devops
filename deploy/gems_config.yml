@@ -1,8 +1,7 @@
 ---
 
 - name: Installing Gems
-#hosts: api_consumer:api_handler:enterprise_dashboard:redis:microsite
-  hosts: microsite
+  hosts: api_consumer:api_handler:enterprise_dashboard:redis:microsite
   user: ubuntu
   sudo: True
 
@@ -38,6 +37,9 @@
         force=True
       async: 30
       poll: 30
+
+    - name: Bundle install octo-core
+      shell: cd {{ apps_dir }}/gems/octo-core && rm -rf Gemfile.lock && bundle install
 
     - name: Building Octo Gems
       shell: cd {{ apps_dir }}/gems && ./build.sh

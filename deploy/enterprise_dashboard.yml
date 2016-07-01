@@ -20,9 +20,13 @@
   tasks:
     - name: Ensuring app dir is present
       action: file dest={{ apps_dir }}/{{ app_name }} state=directory
+      tags:
+        - deploy
 
     - name: Ensure directory for enterprise_dashboard source
       action: file dest={{apps_dir}}/{{app_name}}/src state=directory
+      tags:
+        - deploy
 
     - name: deploy code from repository
       git: repo={{ repo_url }}
@@ -33,25 +37,54 @@
         force=True
       async: 30
       poll: 30
+      tags:
+        - deploy
 
 
     - name: Symlink gems and config
       file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/gems/octo-core/lib/octocore/config/config state=link force=yes
+      tags:
+        - deploy
 
     - name: Symlink enterprise_dashboard and config
       file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/config/config state=link force=yes
+      tags:
+        - deploy
 
     - name: Performing bundle install
-      shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && bundle install
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && rm -rf Gemfile.lock && bundle install
+      tags:
+        - deploy
+
+    - name: Making sure GOD is started
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god -c octo.god
+      tags:
+        - restart
+        - deploy
+
+    - name: Copying enterprise_dashboard GOD script
+      copy: src=../god/enterprise_dashboard.god dest={{ apps_dir }}/heaven/run/lib/enterprise_dashboard.god
+      tags:
+        - restart
+        - deploy
 
     - name: Stopping The Dashboard
-      shell: kill -TERM `cat {{ apps_dir }}/{{ app_name }}/run/{{ app_name }}.pid`
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god stop enterprise_dashboard
       ignore_errors: True
+      tags:
+        - restart
+        - deploy
 
     - name: Symlinking deployment to run directory
       file: src={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ dest={{ apps_dir }}/{{ app_name }}/run state=link force=yes
-
+      tags:
+        - deploy
 
     - name: Starting The Dashboard
-      shell: cd {{ apps_dir }}/{{ app_name }}/run && bundle exec rackup -p {{ port }} -o 0.0.0.0 --pid {{ pid_file }} -D
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god start enterprise_dashboard
+      tags:
+        - restart
+        - deploy
 
+    - name: Cleaning old sources files
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/ && (ls -t|head -n 5;ls)| sort| uniq -u|xargs rm -rf
