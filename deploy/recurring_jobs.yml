@@ -9,21 +9,24 @@
     git_user: pp
     git_pass: 1qaz1qaz
     app_name: recurring_jobs
-    num_workers: 2
+    scheduler_name: resque_scheduler
+    worker_name: resque_worker
     repo_url: "https://{{ git_user }}:{{ git_pass }}@phab.octo.ai/diffusion/RECURR/recurring-jobs.git"
     repo_remote: origin
     repo_version: master
     repo_dir_name: "{{ ansible_date_time.epoch }}"
     apps_dir: /home/ubuntu/apps
-    scheduler_pid: "{{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/shared/pids/resque_scheduler.pid"
-    worker_pid: "{{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/shared/pids/resque_worker"
 
   tasks:
     - name: Ensuring app dir is present
       action: file dest={{ apps_dir }}/{{ app_name }} state=directory
+      tags:
+        - deploy
 
     - name: Ensure directory for api_handler
       action: file dest={{apps_dir}}/{{app_name}}/src state=directory
+      tags:
+        - deploy
 
     - name: deploy code from repository
       git: repo={{ repo_url }}
@@ -34,38 +37,77 @@
         force=True
       async: 30
       poll: 30
+      tags:
+        - deploy
 
     - name: Symlink gems and config
       file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/gems/octo-core/lib/octocore/config/config state=link force=yes
+      tags:
+        - deploy
 
     - name: Symlink Recurring Jobs and config
       file: src={{ apps_dir }}/config/ dest={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/lib/config/config state=link force=yes
+      tags:
+        - deploy
 
     - name: Performing bundle install
       shell: cd {{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ && bundle install
+      tags:
+        - deploy
+
+    - name: Making sure GOD is started
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god -c octo.god
+      tags:
+        - restart
+        - deploy
+
+    - name: Copying resque_scheduler GOD script
+      copy: src=../god/{{ scheduler_name }}.god dest={{ apps_dir }}/heaven/run/lib/{{ scheduler_name }}.god
+      tags:
+        - restart
+        - deploy
+
+    - name: Copying resque_worker GOD script
+      copy: src=../god/{{ worker_name }}.god dest={{ apps_dir }}/heaven/run/lib/{{ worker_name }}.god
+      tags:
+        - restart
+        - deploy
+
 
     - name: Stopping Resque Scheduler
-      shell: kill -TERM `cat {{ scheduler_pid }}`
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god load octo.god && bundle exec god stop {{ scheduler_name }}
       ignore_errors: True
+      tags:
+        - deploy
+        - restart
 
-    - name: Stopping Resque Workers
-      shell: kill -TERM `cat {{ worker_pid }}_{{ item }}.pid`
-      with_sequence: count={{ num_workers }}
+    - name: Stopping Resque Worker
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god stop {{ worker_name }}
       ignore_errors: True
+      tags:
+        - deploy
+        - restart
 
     - name: Symlinking deployment to run directory
       file: src={{ apps_dir }}/{{ app_name }}/src/{{ repo_dir_name }}/ dest={{ apps_dir }}/{{ app_name }}/run state=link force=yes
+      tags:
+        - deploy
 
     - name: Starting Resque Scheduler
-      shell: cd {{ apps_dir }}/{{ app_name }}/run && bundle exec rake resque:scheduler
-      environment:
-        PIDFILE: "{{ scheduler_pid }}"
-        BACKGROUND: yes
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god load octo.god && bundle exec god start {{ scheduler_name }}
+      tags:
+        - deploy
+        - restart
 
     - name: Starting Resque Workers
-      shell: cd {{ apps_dir }}/{{ app_name }}/run && QUEUE=* bundle exec rake resque:work
-      environment:
-        PIDFILE: "{{ worker_pid }}_{{ item }}.pid"
-        BACKGROUND: yes
-      with_sequence: "count={{ num_workers }}"
+      shell: cd {{ apps_dir }}/heaven/run/ && bundle exec god start {{ worker_name }}
+      tags:
+        - deploy
+        - restart
+
+    - name: Cleaning old sources files
+      shell: cd {{ apps_dir }}/{{ app_name }}/src/ && (ls -t|head -n 5;ls)| sort| uniq -u|xargs rm -rf
+      tags:
+        - deploy
+        - restart
 
