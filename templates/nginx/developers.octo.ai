@@ -1,0 +1,22 @@
+server {
+        listen 443;
+
+ssl    on;
+ssl_certificate    /etc/ssl/bundle.crt;
+ssl_certificate_key    /etc/ssl/octo.key;
+
+        root /home/ubuntu/apidocs/run;
+        index index.html index.htm;
+
+        # Make site accessible from http://localhost/
+        server_name developers.octo.ai;
+
+        location / {
+                try_files $uri $uri/ =404;
+        }
+}
+server {
+    listen 80;
+    server_name developers.octo.ai;
+    return 301 https://developers.octo.ai$request_uri;
+}

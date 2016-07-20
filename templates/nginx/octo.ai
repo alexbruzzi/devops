@@ -1,0 +1,21 @@
+server {
+        listen 443;
+
+ssl    on;
+ssl_certificate    /etc/ssl/bundle.crt;
+ssl_certificate_key    /etc/ssl/octo.key;
+
+        root /home/ubuntu/microsite;
+        index index.html index.htm;
+
+        # Make site accessible from http://localhost/
+        server_name www.octo.ai;
+
+        location / {
+                proxy_pass http://127.0.0.1:9292;
+                #try_files $uri $uri/ =404;
+        }
+        location /assets {
+                alias /home/ubuntu/apps/microsite/run/app/public/assets;
+        }
+}
